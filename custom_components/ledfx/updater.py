@@ -17,9 +17,9 @@ from homeassistant.components.sensor import SensorEntityDescription, SensorState
 from homeassistant.components.switch import SwitchDeviceClass, SwitchEntityDescription
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers import event
+from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity import (
-    DeviceEntryType,
     DeviceInfo,
     EntityCategory,
     EntityDescription,
