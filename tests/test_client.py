@@ -282,3 +282,26 @@ async def test_run_scene(hass: HomeAssistant, httpx_mock: HTTPXMock) -> None:
     assert request.url == get_url("scenes")
     assert request.content == b'{"action": "activate", "id": "test"}'
     assert request.method == Method.PUT
+
+
+@pytest.mark.asyncio
+async def test_deactivate_scene(hass: HomeAssistant, httpx_mock: HTTPXMock) -> None:
+    """deactivate_scene test"""
+
+    httpx_mock.add_response(
+        text=load_fixture("deactivate_scene_data.json"), method=Method.PUT
+    )
+
+    client: LedFxClient = LedFxClient(
+        get_async_client(hass, False), f"{MOCK_IP_ADDRESS}/", MOCK_PORT
+    )
+
+    assert await client.deactivate_scene("test") == json.loads(
+        load_fixture("deactivate_scene_data.json")
+    )
+
+    request: Request | None = httpx_mock.get_request(method=Method.PUT)
+    assert request is not None
+    assert request.url == get_url("scenes")
+    assert request.content == b'{"action":"deactivate","id":"test"}'
+    assert request.method == Method.PUT

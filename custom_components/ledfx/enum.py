@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import Enum, StrEnum
 
 
-class Method(str, Enum):
+class Method(StrEnum):
     """Method enum"""
 
     GET = "GET"
@@ -21,7 +21,7 @@ class Version(Enum):
     V2 = 2
 
 
-class ActionType(str, Enum):
+class ActionType(StrEnum):
     """ActionType enum"""
 
     DEFAULT = "default"
@@ -29,7 +29,7 @@ class ActionType(str, Enum):
     DEVICE = "device"
 
 
-class EffectCategory(str, Enum):
+class EffectCategory(StrEnum):
     """EffectCategory enum"""
 
     NONE = "none"

@@ -18,15 +18,13 @@ from homeassistant.const import (
 from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant
 
 from .const import (
-    DEFAULT_CALL_DELAY,
     DEFAULT_SCAN_INTERVAL,
-    DEFAULT_SLEEP,
     DEFAULT_TIMEOUT,
     DOMAIN,
     OPTION_IS_FROM_FLOW,
     PLATFORMS,
     UPDATE_LISTENER,
-    UPDATER,
+    UPDATER, DEFAULT_SLEEP, DEFAULT_CALL_DELAY,
 )
 from .helper import build_auth, get_config_value
 from .updater import LedFxUpdater

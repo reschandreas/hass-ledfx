@@ -23,6 +23,7 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.ledfx.const import (
+    ATTR_SCENE_ACTIVE,
     ATTRIBUTION,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
@@ -148,7 +149,6 @@ async def test_effect_property(hass: HomeAssistant) -> None:
             SERVICE_TURN_ON,
             {ATTR_ENTITY_ID: [unique_id]},
             blocking=True,
-            limit=None,
         )
 
         assert await hass.services.async_call(
@@ -156,7 +156,6 @@ async def test_effect_property(hass: HomeAssistant) -> None:
             SERVICE_TURN_OFF,
             {ATTR_ENTITY_ID: [unique_id]},
             blocking=True,
-            limit=None,
         )
 
         async_fire_time_changed(
@@ -372,6 +371,161 @@ async def test_effect_property_disabled_light(hass: HomeAssistant) -> None:
         assert state.name == "Sparks"
         assert state.attributes["icon"] == "mdi:shimmer"
         assert state.attributes["attribution"] == ATTRIBUTION
+
+
+@pytest.mark.asyncio
+async def test_scene_switch(hass: HomeAssistant) -> None:
+    """Test scene switch.
+
+    :param hass: HomeAssistant
+    """
+
+    with patch("custom_components.ledfx.updater.LedFxClient") as mock_client:
+        await async_mock_client(mock_client)
+
+        mock_client.return_value.run_scene = AsyncMock(
+            return_value=json.loads(load_fixture("run_scene_data.json"))
+        )
+        mock_client.return_value.deactivate_scene = AsyncMock(
+            return_value=json.loads(load_fixture("deactivate_scene_data.json"))
+        )
+
+        _, config_entry = await async_setup(hass)
+
+        assert await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+        updater: LedFxUpdater = hass.data[DOMAIN][config_entry.entry_id][UPDATER]
+        registry = er.async_get(hass)
+
+        assert updater.last_update_success
+
+        # Scene switches should be enabled by default
+        unique_id: str = _generate_id("scene_test", updater.ip)
+        state: State = hass.states.get(unique_id)
+
+        assert state is not None
+        assert state.state == STATE_OFF
+        assert state.name == "Test"
+        assert state.attributes["attribution"] == ATTRIBUTION
+
+        # Test turn on
+        await hass.services.async_call(
+            SWITCH_DOMAIN,
+            SERVICE_TURN_ON,
+            {ATTR_ENTITY_ID: [unique_id]},
+            blocking=True,
+        )
+
+        mock_client.return_value.run_scene.assert_called_once_with("test")
+
+        state = hass.states.get(unique_id)
+        assert state.state == "on"
+
+        # Verify data was updated
+        assert updater.data.get(f"test_{ATTR_SCENE_ACTIVE}") is True
+
+        # Test turn off
+        await hass.services.async_call(
+            SWITCH_DOMAIN,
+            SERVICE_TURN_OFF,
+            {ATTR_ENTITY_ID: [unique_id]},
+            blocking=True,
+        )
+
+        mock_client.return_value.deactivate_scene.assert_called_once_with("test")
+
+        state = hass.states.get(unique_id)
+        assert state.state == STATE_OFF
+
+        # Verify data was updated
+        assert updater.data.get(f"test_{ATTR_SCENE_ACTIVE}") is False
+
+
+@pytest.mark.asyncio
+async def test_scene_switch_active_state(hass: HomeAssistant) -> None:
+    """Test scene switch active state from API.
+
+    :param hass: HomeAssistant
+    """
+
+    with patch("custom_components.ledfx.updater.LedFxClient") as mock_client:
+        await async_mock_client(mock_client)
+
+        # Start with active scene
+        mock_client.return_value.scenes = AsyncMock(
+            return_value=json.loads(load_fixture("scenes_active_data.json"))
+        )
+
+        _, config_entry = await async_setup(hass)
+
+        assert await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+        updater: LedFxUpdater = hass.data[DOMAIN][config_entry.entry_id][UPDATER]
+
+        assert updater.last_update_success
+
+        unique_id: str = _generate_id("scene_test", updater.ip)
+        state: State = hass.states.get(unique_id)
+
+        # Scene should show as "on" since active=true in fixture
+        assert state is not None
+        assert state.state == "on"
+
+
+@pytest.mark.asyncio
+async def test_scene_switch_state_update(hass: HomeAssistant) -> None:
+    """Test scene switch state updates on coordinator refresh.
+
+    :param hass: HomeAssistant
+    """
+
+    with patch("custom_components.ledfx.updater.LedFxClient") as mock_client:
+        await async_mock_client(mock_client)
+
+        def inactive_scenes() -> dict:
+            return json.loads(load_fixture("scenes_data.json"))
+
+        def active_scenes() -> dict:
+            return json.loads(load_fixture("scenes_active_data.json"))
+
+        mock_client.return_value.scenes = AsyncMock(
+            side_effect=MultipleSideEffect(
+                inactive_scenes, inactive_scenes, active_scenes, active_scenes
+            )
+        )
+
+        _, config_entry = await async_setup(hass)
+
+        assert await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+        updater: LedFxUpdater = hass.data[DOMAIN][config_entry.entry_id][UPDATER]
+
+        assert updater.last_update_success
+
+        unique_id: str = _generate_id("scene_test", updater.ip)
+        state: State = hass.states.get(unique_id)
+
+        # Initially off
+        assert state is not None
+        assert state.state == STATE_OFF
+
+        # Trigger coordinator update
+        async_fire_time_changed(
+            hass, utcnow() + timedelta(seconds=DEFAULT_SCAN_INTERVAL + 30)
+        )
+        await hass.async_block_till_done()
+
+        async_fire_time_changed(
+            hass, utcnow() + timedelta(seconds=DEFAULT_SCAN_INTERVAL + 30)
+        )
+        await hass.async_block_till_done()
+
+        # State should update to on
+        state = hass.states.get(unique_id)
+        assert state.state == "on"
 
 
 def _generate_id(code: str, ip_address: str) -> str:

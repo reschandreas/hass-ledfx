@@ -18,6 +18,7 @@ from .const import (
     ATTR_LIGHT_EFFECT,
     ATTR_LIGHT_EFFECT_CONFIG,
     ATTR_LIGHT_STATE,
+    ATTR_SCENE_ACTIVE,
     ATTR_STATE,
     SIGNAL_NEW_SWITCH,
     SWITCH_ICONS,
@@ -53,15 +54,13 @@ async def async_setup_entry(
         :param entity: LedFxEntityDescription: Sensor object
         """
 
-        async_add_entities(
-            [
-                LedFxSwitch(
-                    f"{config_entry.entry_id}-{entity.device_code}-{entity.description.key}",
-                    entity,
-                    updater,
-                )
-            ]
-        )
+        # Different unique_id format for scene vs device switches
+        if entity.type == ActionType.SCENE:
+            unique_id = f"{config_entry.entry_id}-scene-{entity.description.key}"
+        else:
+            unique_id = f"{config_entry.entry_id}-{entity.device_code}-{entity.description.key}"
+
+        async_add_entities([LedFxSwitch(unique_id, entity, updater)])
 
     for switch in updater.switches.values():
         add_switch(switch)
@@ -97,56 +96,81 @@ class LedFxSwitch(LedFxEntity, SwitchEntity):
         self._type = entity.type
         self._attr_device_info = entity.device_info
         self._attr_available: bool = True
-
         self._attr_device_code = entity.device_code
 
-        self.entity_id = generate_entity_id(
-            ENTITY_ID_FORMAT,
-            updater.ip,
-            f"{entity.device_code}_{entity.description.key}",
-        )
+        if self._type == ActionType.SCENE:
+            # Scene switch initialization
+            self.entity_id = generate_entity_id(
+                ENTITY_ID_FORMAT,
+                updater.ip,
+                f"scene_{entity.description.key}",
+            )
 
-        self._attr_is_on = bool(
-            updater.data.get(
-                f"{entity.device_code}_{ATTR_LIGHT_EFFECT_CONFIG}", {}
-            ).get(entity.description.key, False)
-        )
+            self._attr_is_on = bool(
+                updater.data.get(f"{entity.description.key}_{ATTR_SCENE_ACTIVE}", False)
+            )
 
-        self._attr_extra_state_attributes = {
-            ATTR_DEVICE: self._attr_device_code,
-            ATTR_FIELD_EFFECTS: entity.extra.get(ATTR_FIELD_EFFECTS, [])
-            if entity.extra
-            else [],
-        }
+            self._attr_extra_state_attributes = {}
+            self._attr_available = updater.data.get(ATTR_STATE, False)
+        else:
+            # Device effect property switch initialization
+            self.entity_id = generate_entity_id(
+                ENTITY_ID_FORMAT,
+                updater.ip,
+                f"{entity.device_code}_{entity.description.key}",
+            )
 
-        if entity.extra:
-            self._attr_field_type = entity.extra.get(ATTR_FIELD_TYPE)
+            self._attr_is_on = bool(
+                updater.data.get(
+                    f"{entity.device_code}_{ATTR_LIGHT_EFFECT_CONFIG}", {}
+                ).get(entity.description.key, False)
+            )
 
-        self._attr_available = bool(
-            updater.data.get(ATTR_STATE, False)
-            and updater.data.get(f"{self._attr_device_code}_{ATTR_LIGHT_STATE}")
-            and updater.data.get(f"{self._attr_device_code}_{ATTR_LIGHT_EFFECT}")
-            in self._attr_extra_state_attributes[ATTR_FIELD_EFFECTS]
-        )
+            self._attr_extra_state_attributes = {
+                ATTR_DEVICE: self._attr_device_code,
+                ATTR_FIELD_EFFECTS: entity.extra.get(ATTR_FIELD_EFFECTS, [])
+                if entity.extra
+                else [],
+            }
 
-        if entity.description.key in SWITCH_ICONS:
-            self._attr_icon = SWITCH_ICONS[entity.description.key]
+            if entity.extra:
+                self._attr_field_type = entity.extra.get(ATTR_FIELD_TYPE)
+
+            self._attr_available = bool(
+                updater.data.get(ATTR_STATE, False)
+                and updater.data.get(f"{self._attr_device_code}_{ATTR_LIGHT_STATE}")
+                and updater.data.get(f"{self._attr_device_code}_{ATTR_LIGHT_EFFECT}")
+                in self._attr_extra_state_attributes[ATTR_FIELD_EFFECTS]
+            )
+
+            if entity.description.key in SWITCH_ICONS:
+                self._attr_icon = SWITCH_ICONS[entity.description.key]
 
     def _handle_coordinator_update(self) -> None:
         """Update state."""
 
-        is_on: bool = bool(
-            self._updater.data.get(
-                f"{self._attr_device_code}_{ATTR_LIGHT_EFFECT_CONFIG}", {}
-            ).get(self.entity_description.key, False)
-        )
+        if self._type == ActionType.SCENE:
+            # Scene switch state update
+            is_on = bool(
+                self._updater.data.get(
+                    f"{self.entity_description.key}_{ATTR_SCENE_ACTIVE}", False
+                )
+            )
+            is_available = self._updater.data.get(ATTR_STATE, False)
+        else:
+            # Device effect property switch state update
+            is_on = bool(
+                self._updater.data.get(
+                    f"{self._attr_device_code}_{ATTR_LIGHT_EFFECT_CONFIG}", {}
+                ).get(self.entity_description.key, False)
+            )
 
-        is_available: bool = bool(
-            self._updater.data.get(ATTR_STATE, False)
-            and self._updater.data.get(f"{self._attr_device_code}_{ATTR_LIGHT_STATE}")
-            and self._updater.data.get(f"{self._attr_device_code}_{ATTR_LIGHT_EFFECT}")
-            in self._attr_extra_state_attributes[ATTR_FIELD_EFFECTS]
-        )
+            is_available = bool(
+                self._updater.data.get(ATTR_STATE, False)
+                and self._updater.data.get(f"{self._attr_device_code}_{ATTR_LIGHT_STATE}")
+                and self._updater.data.get(f"{self._attr_device_code}_{ATTR_LIGHT_EFFECT}")
+                in self._attr_extra_state_attributes.get(ATTR_FIELD_EFFECTS, [])
+            )
 
         if self._attr_is_on == is_on and self._attr_available == is_available:
             return
@@ -157,20 +181,34 @@ class LedFxSwitch(LedFxEntity, SwitchEntity):
         self.async_write_ha_state()
 
     async def _device_toggle(self, state: bool) -> None:
-        """Device input
+        """Device effect property toggle.
 
         :param state: bool: State
         """
 
         await self.async_update_effect(self.entity_description.key, state)
 
+    async def _scene_toggle(self, state: bool) -> None:
+        """Scene toggle.
+
+        :param state: bool: State
+        """
+
+        if state:
+            await self._updater.client.run_scene(self.entity_description.key)
+        else:
+            await self._updater.client.deactivate_scene(self.entity_description.key)
+
+        # Update local data immediately for responsiveness
+        self._updater.data[f"{self.entity_description.key}_{ATTR_SCENE_ACTIVE}"] = state
+
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Set turn on
+        """Set turn on.
 
         :param **kwargs: Any
         """
 
-        if action := getattr(self, f"_{ActionType.DEVICE}_toggle"):
+        if action := getattr(self, f"_{self._type}_toggle", None):
             await action(True)
 
             self._attr_is_on = True
@@ -178,12 +216,12 @@ class LedFxSwitch(LedFxEntity, SwitchEntity):
             self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Set turn off
+        """Set turn off.
 
         :param **kwargs: Any
         """
 
-        if action := getattr(self, f"_{ActionType.DEVICE}_toggle"):
+        if action := getattr(self, f"_{self._type}_toggle", None):
             await action(False)
 
             self._attr_is_on = False

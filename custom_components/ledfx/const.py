@@ -65,6 +65,9 @@ ATTR_SELECT_AUDIO_INPUT: Final = "audio_input"
 ATTR_SELECT_AUDIO_INPUT_NAME: Final = "Audio input"
 ATTR_SELECT_AUDIO_INPUT_OPTIONS: Final = "audio_input_options"
 
+"""Scene attributes"""
+ATTR_SCENE_ACTIVE: Final = "scene_active"
+
 """Light attributes"""
 ATTR_LIGHT_STATE: Final = "state"
 ATTR_LIGHT_BRIGHTNESS: Final = "brightness"

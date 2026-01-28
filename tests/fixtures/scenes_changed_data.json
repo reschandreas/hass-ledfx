@@ -2,6 +2,7 @@
   "status": "success",
   "scenes": {
     "new_scene": {
+      "active": false,
       "devices": {
         "ambi": {
           "config": {
@@ -41,6 +42,7 @@
       "name": "New scene"
     },
     "test": {
+      "active": false,
       "devices": {
         "ambi": {
           "config": {

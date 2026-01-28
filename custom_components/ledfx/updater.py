@@ -45,6 +45,7 @@ from .const import (
     ATTR_LIGHT_EFFECT_CONFIG,
     ATTR_LIGHT_EFFECTS,
     ATTR_LIGHT_STATE,
+    ATTR_SCENE_ACTIVE,
     ATTR_SELECT_AUDIO_INPUT,
     ATTR_SELECT_AUDIO_INPUT_OPTIONS,
     ATTR_STATE,
@@ -81,7 +82,7 @@ _LOGGER = logging.getLogger(__name__)
 class LedFxUpdater(DataUpdateCoordinator):
     """LedFx data updater for interaction with LedFX API."""
 
-    version: Version = Version.V1
+    version: Version = Version.V2
 
     client: LedFxClient
     code: codes = codes.BAD_GATEWAY
@@ -783,24 +784,47 @@ class LedFxUpdater(DataUpdateCoordinator):
 
         if "scenes" in response and response["scenes"]:
             for code, scene in response["scenes"].items():
-                if code in self.buttons:
-                    continue
+                # Store scene active state (updated on every poll)
+                data[f"{code}_{ATTR_SCENE_ACTIVE}"] = scene.get("active", False)
 
-                self.buttons[code] = LedFxEntityDescription(
-                    description=ButtonEntityDescription(
-                        key=code,
-                        name=scene["name"].title() if "name" in scene else code,
-                        icon="mdi:image",
-                        entity_registry_enabled_default=True,
-                    ),
-                    type=ActionType.SCENE,
-                    device_info=self.device_info,
-                )
+                scene_name = scene["name"].title() if "name" in scene else code
 
-                if self.new_button_callback:
-                    async_dispatcher_send(
-                        self.hass, SIGNAL_NEW_BUTTON, self.buttons[code]
+                # Create button entity if not exists
+                if code not in self.buttons:
+                    self.buttons[code] = LedFxEntityDescription(
+                        description=ButtonEntityDescription(
+                            key=code,
+                            name=scene_name,
+                            icon="mdi:image",
+                            entity_registry_enabled_default=True,
+                        ),
+                        type=ActionType.SCENE,
+                        device_info=self.device_info,
                     )
+
+                    if self.new_button_callback:
+                        async_dispatcher_send(
+                            self.hass, SIGNAL_NEW_BUTTON, self.buttons[code]
+                        )
+
+                # Create scene switch entity if not exists
+                switch_key = f"scene_{code}"
+                if switch_key not in self.switches:
+                    self.switches[switch_key] = LedFxEntityDescription(
+                        description=SwitchEntityDescription(
+                            key=code,
+                            name=scene_name,
+                            icon="mdi:television-ambient-light",
+                            entity_registry_enabled_default=True,
+                        ),
+                        type=ActionType.SCENE,
+                        device_info=self.device_info,
+                    )
+
+                    if self.new_switch_callback:
+                        async_dispatcher_send(
+                            self.hass, SIGNAL_NEW_SWITCH, self.switches[switch_key]
+                        )
 
 
 @dataclass

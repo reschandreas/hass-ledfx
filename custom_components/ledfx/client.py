@@ -301,6 +301,17 @@ class LedFxClient:
             "scenes", Method.PUT, {"action": "activate", "id": scene_id}
         )
 
+    async def deactivate_scene(self, scene_id: str) -> dict:
+        """scenes deactivate method.
+
+        :param scene_id: str: scene id
+        :return dict: dict with api data.
+        """
+
+        return await self.request(
+            "scenes", Method.PUT, {"action": "deactivate", "id": scene_id}
+        )
+
     def _debug(self, message: str, url: str, content: Any, path: str) -> None:
         """Debug log
 

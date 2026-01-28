@@ -2,7 +2,7 @@
   "status": "success",
   "scenes": {
     "test": {
-      "active": false,
+      "active": true,
       "devices": {
         "ambi": {
           "config": {

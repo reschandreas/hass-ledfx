@@ -2,6 +2,7 @@
   "status": "success",
   "scenes": {
     "test": {
+      "active": false,
       "name": "test",
       "virtuals": {
         "wled": {
